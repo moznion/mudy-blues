@@ -37,7 +37,8 @@ func replay(pcapNGPath string, tls bool) error {
 		scheme = "https"
 	}
 
-	sequenceNumberSet := map[uint32]bool{}
+	sequenceNumberToActualStatusCode := map[uint32]int{}
+	sequenceNumberToRequest := map[uint32]*http.Request{}
 
 	ipv4PacketParser := &packet.IPv4Parser{}
 	tcpPacketParser := &packet.TCPParser{}
@@ -68,30 +69,52 @@ func replay(pcapNGPath string, tls bool) error {
 		}
 
 		// dedup the same packet
-		if sequenceNumberSet[tcpPacket.SeqNumber] {
+		if sequenceNumberToRequest[tcpPacket.AckNumber] != nil {
 			continue
 		}
 
-		httpReq, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(tcpPacket.Payload)))
+		req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(tcpPacket.Payload)))
 		if err != nil {
-			//log.Printf("failed to read a HTTP request (it might be not a HTTP protocol): %s", err)
+			resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(tcpPacket.Payload)), sequenceNumberToRequest[tcpPacket.SeqNumber])
+			if err != nil {
+				// if it reaches here, the payload isn't HTTP
+				continue
+			}
+			if resp.StatusCode != sequenceNumberToActualStatusCode[tcpPacket.SeqNumber] {
+				log.Printf(
+					"[ERROR] unexpected response status code; expected = %d, actual = %d, req = %s %s",
+					sequenceNumberToActualStatusCode[tcpPacket.SeqNumber],
+					resp.StatusCode,
+					resp.Request.Method,
+					resp.Request.URL,
+				)
+				continue
+			}
+			log.Printf(
+				"[INFO] passed; expected = %d, actual = %d, req = %s %s",
+				sequenceNumberToActualStatusCode[tcpPacket.SeqNumber],
+				resp.StatusCode,
+				resp.Request.Method,
+				resp.Request.URL,
+			)
 			continue
 		}
 
-		endpoint := fmt.Sprintf("%s://%s%s", scheme, httpReq.Host, httpReq.RequestURI)
+		endpoint := fmt.Sprintf("%s://%s%s", scheme, req.Host, req.RequestURI)
 		u, err := url.Parse(endpoint)
 		if err != nil {
 			return fmt.Errorf("failed to parse request URL: %w", err)
 		}
-		httpReq.RequestURI = ""
-		httpReq.URL = u
+		req.RequestURI = ""
+		req.URL = u
 
-		resp, err := client.Do(httpReq)
+		resp, err := client.Do(req)
 		if err != nil {
 			return fmt.Errorf("failed to send a HTTP request: %w", err)
 		}
 
-		sequenceNumberSet[tcpPacket.SeqNumber] = true
-		log.Printf("sent %s %s: %d", httpReq.Method, endpoint, resp.StatusCode)
+		sequenceNumberToActualStatusCode[tcpPacket.AckNumber] = resp.StatusCode
+		sequenceNumberToRequest[tcpPacket.AckNumber] = req
+		log.Printf("[INFO] sent %s %s: %d", req.Method, endpoint, resp.StatusCode)
 	}
 }

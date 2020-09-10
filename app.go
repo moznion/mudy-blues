@@ -3,5 +3,8 @@ package mudybluez
 import "log"
 
 func Run(pcapNGPath string, tls bool) {
-	log.Println(replay(pcapNGPath, tls))
+	err := replay(pcapNGPath, tls)
+	if err != nil {
+		log.Printf("[ERROR] %s", err)
+	}
 }
