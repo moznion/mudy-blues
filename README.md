@@ -9,7 +9,7 @@ HTTP request re-player and the response verifier.
 example:
 
 ```
-$ tcpdump -A -tttt -i any -w test.pcapng port 12345 and tcp
+$ tcpdump -i any -w test.pcapng port 12345 and tcp
 ```
 
 ### run `mbz`
