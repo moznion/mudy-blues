@@ -1,6 +1,6 @@
 # mudy-bluez (mbz)
 
-HTTP request re-player and the response verifier.
+HTTP request re-player and the response verifier, based on packet capturing.
 
 ## Usage
 
@@ -21,4 +21,3 @@ $ mbz test.pcapng
 ## Author
 
 moznion (<moznion@gmail.com>)
-
